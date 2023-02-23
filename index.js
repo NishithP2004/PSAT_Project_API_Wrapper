@@ -120,7 +120,7 @@ app.get("/spotify/playlist/:playlistID/game.txt", async (req, res) => {
   } else {
     try {
       let playlist = await getPlaylist(req.params.playlistID);
-      let dummyValues = await getPlaylist("2w3lbcL6WV04kZHHggmB98");
+      let dummyValues = await getPlaylist(req.query.dummyPlaylist || "2w3lbcL6WV04kZHHggmB98");
       let question_set = new Set(), answer_set = new Set();
 
       while (question_set.size != 10) {
@@ -145,6 +145,7 @@ app.get("/spotify/playlist/:playlistID/game.txt", async (req, res) => {
             }
             let options = randomOptionString(album.name, Array.from(answer_set));
             fs.appendFileSync("game.txt", "-- BEGIN QUESTION --\n" + asciified + "\n\t\n" + options.options + "\n\t\n-- END QUESTION --\n" + options.key_index + "\n");
+            answer_set.clear();
           }
         });
       })
