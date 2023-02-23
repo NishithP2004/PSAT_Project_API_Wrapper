@@ -5,6 +5,9 @@ const asciify = require('asciify-image');
 const fs = require('fs');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 require('dotenv').config();
+const crypto = require('crypto')
+const querystring = require('querystring')
+const request = require('request')
 
 // Creating an express server at port: 3000
 const PORT = process.env.PORT || 3000;
@@ -42,7 +45,7 @@ app.get("/image-to-ascii", (req, res) => {
         fs.writeFileSync('out.txt', asciified);
         res.sendFile(__dirname + "/out.txt", () => {
           fs.writeFileSync("out.txt", "", (err) => {
-            if(err) console.log(err);
+            if (err) console.log(err);
           })
         });
       }
@@ -96,7 +99,7 @@ app.get("/spotify/playlist/:playlistID", async (req, res) => {
       })
     } catch (err) {
       if (err) res.json({
-        error: err | "OAuth Token Expired",
+        error: (Object.keys(err).length > 0) ? err : "OAuth Token Expired",
         success: false
       })
     }
@@ -148,12 +151,12 @@ app.get("/spotify/playlist/:playlistID/game.txt", async (req, res) => {
 
       res.sendFile(__dirname + "/game.txt", () => {
         fs.writeFileSync("game.txt", "", (err) => {
-            if(err) console.log(err);
-          });
+          if (err) console.log(err);
+        });
       })
     } catch (err) {
       if (err) res.json({
-        error: err | "OAuth Token Expired",
+        error: (Object.keys(err).length > 0) ? err : "OAuth Token Expired",
         success: false
       })
     }
@@ -175,6 +178,89 @@ function randomOptionString(key, dummyValues) {
 
   return { key_index: key_index + 1, options: options.join("\n") }
 }
+
+function generateRandomString(len) {
+  return (crypto.randomBytes(len).toString('hex'))
+}
+
+app.get('/login', function(req, res) {
+
+  var state = generateRandomString(16);
+  var scope = 'user-read-private user-read-email';
+  var redirect_uri = "https://PSAT-Project.nishithp2004.repl.co/callback"
+
+  res.redirect('https://accounts.spotify.com/authorize?' +
+    querystring.stringify({
+      response_type: 'code',
+      client_id: process.env.SPOTIFY_CLIENT_ID,
+      scope: scope,
+      redirect_uri: redirect_uri,
+      state: state
+    }));
+});
+
+app.get('/callback', async function(req, res) {
+
+  var code = req.query.code || null;
+  var state = req.query.state || null;
+  var redirect_uri = "https://PSAT-Project.nishithp2004.repl.co/callback"
+
+  if (state === null) {
+    res.redirect('/#' +
+      querystring.stringify({
+        error: 'state_mismatch'
+      }));
+  } else {
+    var authOptions = {
+      url: 'https://accounts.spotify.com/api/token',
+      form: {
+        code: code,
+        redirect_uri: redirect_uri,
+        grant_type: 'authorization_code'
+      },
+      headers: {
+        'Authorization': 'Basic ' + btoa(process.env.SPOTIFY_CLIENT_ID + ':' + process.env.SPOTIFY_CLIENT_SECRET)
+      },
+      json: true
+    };
+
+    request.post(authOptions, function(error, response, body) {
+      if (!error && response.statusCode === 200) {
+        process.env.SPOTIFY_BEARER_TOKEN = body["access_token"];
+        process.env.SPOTIFY_REFRESH_TOKEN = body["refresh_token"];
+        // res.send(body);
+        res.redirect("https://PSAT-Project.nishithp2004.repl.co/")
+      }
+    });
+  }
+});
+
+function refreshToken(refresh_token) {
+  var refresh_token = refresh_token || process.env.SPOTIFY_REFRESH_TOKEN
+  var authOptions = {
+    url: 'https://accounts.spotify.com/api/token',
+    headers: { 'Authorization': 'Basic ' + btoa(process.env.SPOTIFY_CLIENT_ID + ':' + process.env.SPOTIFY_CLIENT_SECRET) },
+    form: {
+      grant_type: 'refresh_token',
+      refresh_token
+    },
+    json: true
+  };
+
+  request.post(authOptions, function(error, response, body) {
+    if (!error && response.statusCode === 200) {
+      var access_token = body.access_token;
+      process.env.SPOTIFY_BEARER_TOKEN = access_token;
+    }
+  });
+}
+
+app.get('/refresh_token', function(req, res) {
+  refreshToken(process.env.SPOTIFY_REFRESH_TOKEN);
+  res.json({
+    access_token: process.env.SPOTIFY_BEARER_TOKEN
+  })
+});
 
 // Made with ❤️ by Nishith P
 // PSAT Project API Wrapper
